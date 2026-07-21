@@ -1,0 +1,22 @@
+[Unit]
+Description=DiscStream media server
+Documentation=https://github.com/local/discstream
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/discstream
+User=discstream
+Group=discstream
+Environment=NODE_ENV=production
+Environment=DISCSTREAM_RUNTIME_DIR=/var/lib/discstream
+EnvironmentFile=-/etc/discstream/discstream.env
+ExecStart=/usr/bin/env pnpm --filter @discstream/server start
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
