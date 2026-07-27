@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import type {
   DiagnosticsResponse,
+  AiRestorationJob,
   DiscInspection,
   DvdUpscaleProfile,
   LocalMediaFolderBrowserResponse,
@@ -38,8 +39,12 @@ import type {
 import type Hls from "hls.js";
 import {
   addLocalMediaRoot,
+  cancelCurrentAiRestoration,
+  deleteAiRestoration,
   ejectDrive,
   loadDiagnostics,
+  loadCurrentAiRestoration,
+  pauseCurrentAiRestoration,
   loadLocalMediaFolders,
   loadSnapshot,
   lookupCurrentAudioCdMetadata,
@@ -48,8 +53,10 @@ import {
   playDvdVideo,
   playLocalMedia,
   removeLocalMediaRoot,
+  resumeCurrentAiRestoration,
   saveCurrentAudioCdMetadata,
   saveCurrentDvdMetadata,
+  startCurrentDvdAiRestoration,
   type AudioCdMetadataInput,
   stopSession,
   type DvdMetadataTitleInput,
@@ -152,6 +159,7 @@ export function App() {
   const [selectedDvdChapter, setSelectedDvdChapter] = useState<number | null>(null);
   const [selectedDvdVideoQuality, setSelectedDvdVideoQuality] = useState<VideoQualityProfile>(() => loadVideoQualityPreference());
   const [selectedDvdUpscale, setSelectedDvdUpscale] = useState<DvdUpscaleProfile>(() => loadDvdUpscalePreference());
+  const [aiRestorationJob, setAiRestorationJob] = useState<AiRestorationJob | null>(null);
   const [playbackHistory, setPlaybackHistory] = useState<PlaybackResumeHistory>(() => loadPlaybackHistory());
   const [localMediaQuery, setLocalMediaQuery] = useState("");
   const [localMediaFilter, setLocalMediaFilter] = useState<LocalMediaFilter>("all");
@@ -177,6 +185,30 @@ export function App() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    const refreshRestoration = async () => {
+      try {
+        const response = await loadCurrentAiRestoration();
+        if (!disposed) {
+          setAiRestorationJob(response.job);
+        }
+      } catch {
+        // AI restoration is optional and should not interrupt regular playback.
+      }
+    };
+    void refreshRestoration();
+    const timer = window.setInterval(() => {
+      if (aiRestorationJob && !["completed", "failed", "cancelled"].includes(aiRestorationJob.status)) {
+        void refreshRestoration();
+      }
+    }, 2000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [aiRestorationJob?.status]);
 
   useEffect(() => {
     if (state !== "ready") {
@@ -410,6 +442,43 @@ export function App() {
       setError(nextError instanceof Error ? nextError.message : "DVD chapter names could not be saved.");
       throw nextError;
     }
+  };
+
+  const handleStartAiRestoration = async (
+    title: number,
+    options: {
+      localMediaId?: string;
+      previewSeconds?: number;
+      model?: "realesrgan-x4plus" | "realesr-animevideov3";
+      audioTrack?: number;
+      subtitleTrack?: number;
+    } = {}
+  ) => {
+    try {
+      const response = await startCurrentDvdAiRestoration(title, options);
+      setAiRestorationJob(response.job);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "AI restoration could not be started.");
+    }
+  };
+
+  const handleCancelAiRestoration = async () => {
+    const response = await cancelCurrentAiRestoration();
+    setAiRestorationJob(response.job);
+  };
+
+  const handleDeleteAiRestoration = async (jobId: string) => {
+    await deleteAiRestoration(jobId);
+    setAiRestorationJob(null);
+  };
+
+  const handlePauseAiRestoration = async () => {
+    setAiRestorationJob((await pauseCurrentAiRestoration()).job);
+  };
+
+  const handleResumeAiRestoration = async () => {
+    setAiRestorationJob((await resumeCurrentAiRestoration()).job);
   };
 
   const handleLookupAudioCdMetadata = async () => {
@@ -681,6 +750,8 @@ export function App() {
                   selectedSubtitleTrack={selectedDvdSubtitleTrack}
                   selectedVideoQuality={selectedDvdVideoQuality}
                   selectedUpscale={selectedDvdUpscale}
+                  aiRestorationJob={aiRestorationJob}
+                  aiRestorationAvailable={Boolean(snapshot.capabilities.aiUpscaling?.available)}
                   onSelectTitle={(title) => {
                     setSelectedDvdTitle(title);
                     setSelectedDvdAudioTrack(undefined);
@@ -702,6 +773,43 @@ export function App() {
                   onSaveMetadata={handleSaveDvdMetadata}
                   onPlay={(options) => {
                     void handlePlayDvd(options);
+                  }}
+                  onStartAiRestoration={(title, previewSeconds, model) => {
+                    void handleStartAiRestoration(title, {
+                      previewSeconds,
+                      model,
+                      audioTrack: selectedDvdAudioTrack,
+                      subtitleTrack: selectedDvdSubtitleTrack ?? undefined
+                    });
+                  }}
+                  onCancelAiRestoration={() => {
+                    void handleCancelAiRestoration();
+                  }}
+                  onDeleteAiRestoration={(jobId) => {
+                    void handleDeleteAiRestoration(jobId);
+                  }}
+                  onPauseAiRestoration={() => {
+                    void handlePauseAiRestoration();
+                  }}
+                  onResumeAiRestoration={() => {
+                    void handleResumeAiRestoration();
+                  }}
+                  onPlayRestored={(job) => {
+                    if (!job.streamUrl) {
+                      return;
+                    }
+                    setSnapshot((current) => current ? {
+                      ...current,
+                      currentSession: {
+                        sessionId: `restoration-${job.jobId}`,
+                        status: "playing",
+                        mediaType: "dvd-video",
+                        title: job.title,
+                        displayName: `AI restored title ${job.title}`,
+                        streamUrl: job.streamUrl,
+                        startedAt: new Date().toISOString()
+                      }
+                    } : current);
                   }}
                 />
               </>
@@ -932,6 +1040,14 @@ export function App() {
                             onPlay={() => {
                               void handlePlayLocal(item);
                             }}
+                            onRestore={
+                              item.mediaType === "dvd-video-folder" && snapshot?.capabilities.aiUpscaling?.available
+                                ? () => {
+                                    const title = item.dvdVideo?.mainTitleId ?? item.dvdVideo?.titles[0]?.id ?? 1;
+                                    void handleStartAiRestoration(title, { localMediaId: item.id });
+                                  }
+                                : undefined
+                            }
                           />
                         );
                       })}
@@ -978,6 +1094,8 @@ function DvdTitles({
   selectedSubtitleTrack,
   selectedVideoQuality,
   selectedUpscale,
+  aiRestorationJob,
+  aiRestorationAvailable,
   selectedChapter,
   onSelectTitle,
   onSelectAudioTrack,
@@ -986,7 +1104,13 @@ function DvdTitles({
   onSelectUpscale,
   onSelectChapter,
   onSaveMetadata,
-  onPlay
+  onPlay,
+  onStartAiRestoration,
+  onCancelAiRestoration,
+  onDeleteAiRestoration,
+  onPauseAiRestoration,
+  onResumeAiRestoration,
+  onPlayRestored
 }: {
   disc: DiscInspection;
   pendingTitle: number | "auto" | null;
@@ -995,6 +1119,8 @@ function DvdTitles({
   selectedSubtitleTrack: number | null;
   selectedVideoQuality: VideoQualityProfile;
   selectedUpscale: DvdUpscaleProfile;
+  aiRestorationJob: AiRestorationJob | null;
+  aiRestorationAvailable: boolean;
   selectedChapter: number | null;
   onSelectTitle: (title: number) => void;
   onSelectAudioTrack: (track: number | undefined) => void;
@@ -1004,12 +1130,23 @@ function DvdTitles({
   onSelectChapter: (chapter: number | null) => void;
   onSaveMetadata: (titles: DvdMetadataTitleInput[]) => Promise<void>;
   onPlay: (options: DvdPlaybackOptions) => void;
+  onStartAiRestoration: (
+    title: number,
+    previewSeconds?: number,
+    model?: "realesrgan-x4plus" | "realesr-animevideov3"
+  ) => void;
+  onCancelAiRestoration: () => void;
+  onDeleteAiRestoration: (jobId: string) => void;
+  onPauseAiRestoration: () => void;
+  onResumeAiRestoration: () => void;
+  onPlayRestored: (job: AiRestorationJob) => void;
 }) {
   const [chaptersOpen, setChaptersOpen] = useState(false);
   const [chapterEditorOpen, setChapterEditorOpen] = useState(false);
   const [chapterDrafts, setChapterDrafts] = useState<Record<number, string>>({});
   const [metadataSaving, setMetadataSaving] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [restorationModel, setRestorationModel] = useState<"realesrgan-x4plus" | "realesr-animevideov3">("realesrgan-x4plus");
 
   if (disc.type !== "dvd-video") {
     return null;
@@ -1093,6 +1230,87 @@ function DvdTitles({
           {isStarting ? <span className="button-spinner" aria-hidden="true" /> : <Play size={18} />}
           <span>{isStarting ? "Starting" : activeChapter ? `Play chapter ${activeChapter.number}` : "Play title"}</span>
         </button>
+      </div>
+
+      <div className="ai-restoration-panel" aria-label="AI restoration">
+        <div>
+          <span className="eyebrow">AI restoration</span>
+          <strong>
+            {aiRestorationJob
+              ? aiRestorationJob.status === "completed"
+                ? "Restored version ready"
+                : aiRestorationJob.message ?? aiRestorationJob.status
+              : aiRestorationAvailable
+                ? "Restore this title with Real-ESRGAN"
+                : "Real-ESRGAN is unavailable"}
+          </strong>
+          {aiRestorationJob && !["completed", "failed", "cancelled"].includes(aiRestorationJob.status) ? (
+            <progress value={aiRestorationJob.progress} max={100}>{aiRestorationJob.progress}%</progress>
+          ) : null}
+          {aiRestorationJob?.etaSeconds ? <small>Estimated time remaining: {formatPlaybackTime(aiRestorationJob.etaSeconds)}</small> : null}
+          {aiRestorationJob?.totalBlocks ? (
+            <small>{aiRestorationJob.processedBlocks ?? 0} of {aiRestorationJob.totalBlocks} blocks completed</small>
+          ) : null}
+          {aiRestorationJob?.error ? <small>{aiRestorationJob.error}</small> : null}
+          {!aiRestorationJob || ["failed", "cancelled"].includes(aiRestorationJob.status) ? (
+            <select
+              value={restorationModel}
+              onChange={(event) => setRestorationModel(event.currentTarget.value as typeof restorationModel)}
+              aria-label="AI restoration model"
+            >
+              <option value="realesrgan-x4plus">Film and live action</option>
+              <option value="realesr-animevideov3">Animation</option>
+            </select>
+          ) : null}
+        </div>
+        <div className="ai-restoration-actions">
+          {aiRestorationJob?.status === "completed" && aiRestorationJob.streamUrl ? (
+            <>
+              <button className="action-button secondary" type="button" onClick={() => onPlayRestored(aiRestorationJob)}>
+                <Play size={16} />
+                <span>Play restored</span>
+              </button>
+              <button className="icon-button danger" type="button" onClick={() => onDeleteAiRestoration(aiRestorationJob.jobId)} title="Delete restored cache">
+                <Trash2 size={16} />
+              </button>
+            </>
+          ) : aiRestorationJob && !["failed", "cancelled"].includes(aiRestorationJob.status) ? (
+            <>
+              <button
+                className="action-button secondary"
+                type="button"
+                onClick={aiRestorationJob.status === "paused" ? onResumeAiRestoration : onPauseAiRestoration}
+              >
+                {aiRestorationJob.status === "paused" ? <Play size={16} /> : <Pause size={16} />}
+                <span>{aiRestorationJob.status === "paused" ? "Resume" : "Pause"}</span>
+              </button>
+              <button className="action-button secondary" type="button" onClick={onCancelAiRestoration}>
+                <X size={16} />
+                <span>Cancel</span>
+              </button>
+            </>
+          ) : (
+            <button
+              className="action-button secondary"
+              type="button"
+              disabled={!aiRestorationAvailable || !activeTitle}
+              onClick={() => activeTitle && onStartAiRestoration(activeTitle.id, undefined, restorationModel)}
+            >
+              <Wrench size={16} />
+              <span>Restore 2×</span>
+            </button>
+          )}
+          {!aiRestorationJob || ["failed", "cancelled"].includes(aiRestorationJob.status) ? (
+            <button
+              className="action-button secondary"
+              type="button"
+              disabled={!aiRestorationAvailable || !activeTitle}
+              onClick={() => activeTitle && onStartAiRestoration(activeTitle.id, 60, restorationModel)}
+            >
+              <span>Test 60s</span>
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="dvd-controls" aria-label="DVD playback options">
@@ -2339,6 +2557,8 @@ function videoEncoderLabel(encoder: string): string {
       return "VideoToolbox hardware encoding";
     case "h264_v4l2m2m":
       return "V4L2 hardware encoding";
+    case "h264_nvenc":
+      return "NVIDIA NVENC hardware encoding";
     case "libx264":
       return "Software H.264 encoding";
     default:
@@ -2366,13 +2586,15 @@ function LocalMediaRow({
   pending,
   resumePosition,
   onResume,
-  onPlay
+  onPlay,
+  onRestore
 }: {
   item: LocalMediaItem;
   pending: boolean;
   resumePosition?: number;
   onResume: () => void;
   onPlay: () => void;
+  onRestore?: () => void;
 }) {
   const isVideo = item.mediaType === "video-file" || item.mediaType === "dvd-video-folder";
   const needsTranscode = item.mediaType === "dvd-video-folder" || Boolean(item.videoFile?.transcodeRequired);
@@ -2399,6 +2621,18 @@ function LocalMediaRow({
           <RefreshCcw size={18} />
         </button>
       ) : null}
+      {onRestore ? (
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onRestore}
+          disabled={pending}
+          aria-label={`Restore ${item.displayName} with AI`}
+          title="Restore with AI"
+        >
+          <Wrench size={18} />
+        </button>
+      ) : null}
       <button
         className="icon-button"
         type="button"
@@ -2418,7 +2652,8 @@ function DiagnosticsPanel({ diagnostics }: { diagnostics: DiagnosticsResponse })
   const encoderReady =
     diagnostics.capabilities.videoEncoders.libx264 ||
     diagnostics.capabilities.videoEncoders.h264VideoToolbox ||
-    diagnostics.capabilities.videoEncoders.h264V4l2m2m;
+    diagnostics.capabilities.videoEncoders.h264V4l2m2m ||
+    diagnostics.capabilities.videoEncoders.h264Nvenc;
 
   return (
     <div className="diagnostics-panel">
@@ -2437,6 +2672,17 @@ function DiagnosticsPanel({ diagnostics }: { diagnostics: DiagnosticsResponse })
           <span className="eyebrow">FFmpeg</span>
           <strong>{diagnostics.capabilities.commands.ffmpeg ? "Ready" : "Missing"}</strong>
           <p>{encoderReady ? "H.264 encoder found" : "Encoder missing"}</p>
+        </div>
+        <div>
+          <span className="eyebrow">AI restoration</span>
+          <strong>{diagnostics.capabilities.aiUpscaling?.available ? "Ready" : "Unavailable"}</strong>
+          <p>
+            {diagnostics.capabilities.aiUpscaling?.backend === "realesrgan-pytorch-cuda"
+              ? "Real-ESRGAN with CUDA"
+              : diagnostics.capabilities.aiUpscaling?.backend === "realesrgan-ncnn-vulkan"
+                ? "Real-ESRGAN with Vulkan"
+                : "Real-ESRGAN backend not found"}
+          </p>
         </div>
         <div>
           <span className="eyebrow">Local media</span>

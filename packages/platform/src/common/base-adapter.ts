@@ -1,9 +1,11 @@
 import os from "node:os";
+import path from "node:path";
 import type { DiscInspection, DriveStatus, OpticalDrive, PlatformCapabilities, SupportedPlatform } from "@discstream/contracts";
 import { makeError } from "@discstream/contracts";
 import type { DriveEvent, DriveWatcher, PlatformAdapter, RuntimePaths } from "../platform-adapter.js";
 import { detectCommands } from "./command-detector.js";
 import { detectFfmpegEncoders } from "./ffmpeg-encoders.js";
+import { detectAiUpscaling } from "./ai-upscalers.js";
 
 export abstract class BasePlatformAdapter implements PlatformAdapter {
   abstract readonly platform: SupportedPlatform;
@@ -14,7 +16,12 @@ export abstract class BasePlatformAdapter implements PlatformAdapter {
   async detectCapabilities(): Promise<PlatformCapabilities> {
     const commands = await detectCommands();
     const encoders = await detectFfmpegEncoders(commands.ffmpeg);
-    const drives = await this.detectOpticalDrives();
+    const localAiExecutable = path.join(this.paths.dataDir, "ai", "realesrgan", "realesrgan-ncnn-vulkan");
+    const localCudaRoot = path.join(this.paths.dataDir, "ai", "cuda");
+    const [drives, aiUpscaling] = await Promise.all([
+      this.detectOpticalDrives(),
+      detectAiUpscaling(localAiExecutable, localCudaRoot)
+    ]);
 
     return {
       platform: this.platform,
@@ -24,6 +31,7 @@ export abstract class BasePlatformAdapter implements PlatformAdapter {
       commands,
       videoEncoders: encoders.videoEncoders,
       audioEncoders: encoders.audioEncoders,
+      aiUpscaling,
       opticalDrives: drives.length,
       paths: this.paths
     };

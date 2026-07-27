@@ -5,6 +5,7 @@ export interface ParsedFfmpegEncoders {
     libx264: boolean;
     h264VideoToolbox: boolean;
     h264V4l2m2m: boolean;
+    h264Nvenc: boolean;
   };
   audioEncoders: {
     aac: boolean;
@@ -17,7 +18,8 @@ export const emptyEncoders: ParsedFfmpegEncoders = {
   videoEncoders: {
     libx264: false,
     h264VideoToolbox: false,
-    h264V4l2m2m: false
+    h264V4l2m2m: false,
+    h264Nvenc: false
   },
   audioEncoders: {
     aac: false,
@@ -38,7 +40,8 @@ export function parseFfmpegEncoders(output: string): ParsedFfmpegEncoders {
     videoEncoders: {
       libx264: names.has("libx264"),
       h264VideoToolbox: names.has("h264_videotoolbox"),
-      h264V4l2m2m: names.has("h264_v4l2m2m")
+      h264V4l2m2m: names.has("h264_v4l2m2m"),
+      h264Nvenc: names.has("h264_nvenc")
     },
     audioEncoders: {
       aac: names.has("aac"),

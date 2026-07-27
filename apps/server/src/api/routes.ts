@@ -19,6 +19,8 @@ import type { ServerFolderBrowser } from "../config/server-folder-browser.js";
 import { buildRuntimeStatus } from "./runtime-status.js";
 import type { RuntimeStatusBroadcaster } from "./runtime-websocket.js";
 import type { SessionManager } from "../sessions/session-manager.js";
+import { selectH264VideoEncoder } from "../sessions/session-manager.js";
+import type { AiRestorationManager } from "../sessions/ai-restoration-manager.js";
 import type { DiscStreamServerConfig } from "../config/config.js";
 import { buildDiagnosticsWarnings, inspectStreamCache } from "./diagnostics.js";
 
@@ -30,6 +32,7 @@ export interface RouteServices {
   localMediaRoots: LocalMediaRootStore;
   serverFolders: ServerFolderBrowser;
   sessions: SessionManager;
+  restorations?: AiRestorationManager;
   audioCdMetadata: AudioCdMetadataStore;
   dvdMetadata: DvdMetadataStore;
   config: DiscStreamServerConfig;
@@ -83,6 +86,15 @@ const audioCdMetadataRequestSchema = z.object({
   )
 });
 
+const aiRestorationRequestSchema = z.object({
+  title: z.number().int().positive(),
+  localMediaId: z.string().min(1).optional(),
+  previewSeconds: z.number().min(10).max(300).optional(),
+  model: z.enum(["realesrgan-x4plus", "realesr-animevideov3"]).optional(),
+  audioTrack: z.number().int().optional(),
+  subtitleTrack: z.number().int().optional()
+});
+
 export function registerRoutes(app: FastifyInstance, services: RouteServices) {
   const health = (): HealthResponse => ({
     ok: true,
@@ -93,6 +105,91 @@ export function registerRoutes(app: FastifyInstance, services: RouteServices) {
   app.get("/api/health", async () => health());
 
   app.get("/api/capabilities", async () => services.platform.detectCapabilities());
+
+  app.get("/api/restorations/current", async () => ({ job: services.restorations?.current ?? null }));
+
+  app.post("/api/restorations/current", async (request) => {
+    if (!services.restorations) {
+      throw makeError("STREAM_PROFILE_UNAVAILABLE", "AI restoration service is not configured.");
+    }
+    const parsed = aiRestorationRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw makeError("VALIDATION_ERROR", "AI restoration request is invalid.", { detail: parsed.error.message });
+    }
+    const capabilities = await services.platform.detectCapabilities();
+    const executable = capabilities.aiUpscaling?.executable;
+    const videoEncoder = selectH264VideoEncoder(capabilities);
+    if (!capabilities.aiUpscaling?.available || !executable) {
+      throw makeError("STREAM_PROFILE_UNAVAILABLE", "Real-ESRGAN is not available.", {
+        hint: "Run pnpm install:ai on the DiscStream server."
+      });
+    }
+    if (parsed.data.localMediaId) {
+      const source = await services.localMedia.resolveItemPath(parsed.data.localMediaId);
+      if (!source || source.item.mediaType !== "dvd-video-folder") {
+        throw makeError("MEDIA_NOT_READABLE", "The selected local item is not a readable VIDEO_TS source.");
+      }
+      return {
+        job: await services.restorations.start({
+          videoTsPath: source.absolutePath,
+          sourceId: `local-dvd:${source.item.id}:title:${parsed.data.title}${parsed.data.previewSeconds ? `:preview:${parsed.data.previewSeconds}` : ""}`,
+          title: parsed.data.title,
+          durationSeconds: parsed.data.previewSeconds ?? source.item.dvdVideo?.titles.find((item) => item.id === parsed.data.title)?.durationSeconds,
+          executable,
+          model: parsed.data.model,
+          audioTrack: parsed.data.audioTrack,
+          subtitleTrack: parsed.data.subtitleTrack,
+          videoEncoder,
+          aiBackend: capabilities.aiUpscaling.backend,
+          pythonExecutable: capabilities.aiUpscaling.pythonExecutable,
+          fallbackExecutable: capabilities.aiUpscaling.fallbackExecutable
+        })
+      };
+    }
+    const disc = await currentDiscInspection(services.platform, {
+      audioCdMetadata: services.audioCdMetadata,
+      dvdMetadata: services.dvdMetadata
+    });
+    if (disc.type !== "dvd-video" || !disc.mountedVolume?.mountPath) {
+      throw makeError("NO_DISC", "Insert and mount a DVD before starting AI restoration.");
+    }
+    const title = disc.dvdVideo?.titles.find((item) => item.id === parsed.data.title);
+    try {
+      return {
+        job: await services.restorations.start({
+          videoTsPath: disc.mountedVolume.mountPath,
+          sourceId: `${disc.label ?? disc.mountedVolume.label ?? "dvd"}:title:${parsed.data.title}${parsed.data.previewSeconds ? `:preview:${parsed.data.previewSeconds}` : ""}`,
+          title: parsed.data.title,
+          durationSeconds: parsed.data.previewSeconds ?? title?.durationSeconds,
+          executable,
+          model: parsed.data.model,
+          audioTrack: parsed.data.audioTrack,
+          subtitleTrack: parsed.data.subtitleTrack,
+          videoEncoder,
+          aiBackend: capabilities.aiUpscaling.backend,
+          pythonExecutable: capabilities.aiUpscaling.pythonExecutable,
+          fallbackExecutable: capabilities.aiUpscaling.fallbackExecutable
+        })
+      };
+    } catch (error) {
+      throw makeError("STREAM_START_FAILED", "AI restoration could not be started.", {
+        detail: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.delete("/api/restorations/current", async () => ({ job: await services.restorations?.cancel() ?? null }));
+  app.post("/api/restorations/current/pause", async () => ({ job: await services.restorations?.pause() ?? null }));
+  app.post("/api/restorations/current/resume", async () => ({ job: await services.restorations?.resume() ?? null }));
+
+  app.delete("/api/restorations/cache/:jobId", async (request) => {
+    const parsed = z.object({ jobId: z.string().regex(/^[a-f0-9]{24}$/) }).safeParse(request.params);
+    if (!parsed.success || !services.restorations) {
+      throw makeError("VALIDATION_ERROR", "Restoration cache identifier is invalid.");
+    }
+    await services.restorations.deleteCached(parsed.data.jobId);
+    return { ok: true };
+  });
 
   app.get("/api/drives", async () => ({
     drives: await services.platform.detectOpticalDrives()

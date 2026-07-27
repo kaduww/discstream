@@ -520,6 +520,10 @@ export function selectH264VideoEncoder(capabilities: PlatformCapabilities): H264
     return "h264_videotoolbox";
   }
 
+  if (capabilities.platform === "linux" && capabilities.videoEncoders.h264Nvenc) {
+    return "h264_nvenc";
+  }
+
   if (capabilities.platform === "linux" && capabilities.videoEncoders.h264V4l2m2m) {
     return "h264_v4l2m2m";
   }
@@ -534,6 +538,10 @@ export function selectH264VideoEncoder(capabilities: PlatformCapabilities): H264
 
   if (capabilities.videoEncoders.h264V4l2m2m) {
     return "h264_v4l2m2m";
+  }
+
+  if (capabilities.videoEncoders.h264Nvenc) {
+    return "h264_nvenc";
   }
 
   return "libx264";

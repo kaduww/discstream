@@ -44,4 +44,19 @@ describe("resolveRuntimePaths", () => {
       await fs.rm(runtimeDir, { recursive: true, force: true });
     }
   });
+
+  it("uses the workspace runtime when started from a package directory", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "discstream-runtime-workspace-"));
+    const packageDir = path.join(workspace, "apps", "server");
+    await fs.mkdir(packageDir, { recursive: true });
+    await fs.writeFile(path.join(workspace, "pnpm-workspace.yaml"), "packages: []\n");
+
+    try {
+      const paths = await resolveRuntimePaths(packageDir, {});
+      expect(paths.dataDir).toBe(path.join(workspace, "runtime", "data"));
+      expect(paths.cacheDir).toBe(path.join(workspace, "runtime", "cache"));
+    } finally {
+      await fs.rm(workspace, { recursive: true, force: true });
+    }
+  });
 });

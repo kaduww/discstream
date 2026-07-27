@@ -125,7 +125,12 @@ function capabilityWarnings(capabilities: PlatformCapabilities): DiscStreamWarni
     });
   }
 
-  if (!capabilities.videoEncoders.libx264 && !capabilities.videoEncoders.h264VideoToolbox && !capabilities.videoEncoders.h264V4l2m2m) {
+  if (
+    !capabilities.videoEncoders.libx264 &&
+    !capabilities.videoEncoders.h264VideoToolbox &&
+    !capabilities.videoEncoders.h264V4l2m2m &&
+    !capabilities.videoEncoders.h264Nvenc
+  ) {
     warnings.push({
       code: "STREAM_PROFILE_UNAVAILABLE",
       message: "No H.264 video encoder was detected.",

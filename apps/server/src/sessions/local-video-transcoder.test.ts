@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLocalVideoHlsArgs, isReadyHlsPlaylist } from "./local-video-transcoder.js";
+import { buildLocalVideoHlsArgs, h264VideoEncoderArgs, isReadyHlsPlaylist } from "./local-video-transcoder.js";
 
 describe("buildLocalVideoHlsArgs", () => {
   it("normalizes legacy video into browser-compatible HLS", () => {
@@ -31,6 +31,14 @@ describe("buildLocalVideoHlsArgs", () => {
     expect(args).toContain("h264_videotoolbox");
     expect(args).toContain("-b:v");
     expect(args).not.toContain("-crf");
+  });
+
+  it("can use NVIDIA NVENC for H.264 output", () => {
+    const args = h264VideoEncoderArgs("h264_nvenc", "quality", "23");
+    expect(args).toContain("h264_nvenc");
+    expect(args).toContain("p6");
+    expect(args).toContain("19");
+    expect(args).not.toContain("libx264");
   });
 
   it("waits for a playlist with playable segments", () => {

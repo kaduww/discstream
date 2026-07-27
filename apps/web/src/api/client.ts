@@ -1,5 +1,6 @@
 import type {
   DiagnosticsResponse,
+  AiRestorationJob,
   DiscInspection,
   DvdUpscaleProfile,
   DriveStatus,
@@ -220,6 +221,39 @@ export function playDvdVideo(driveId: string | undefined, options: DvdPlaybackOp
     dvdUpscale: options.dvdUpscale,
     replace: true
   });
+}
+
+export function loadCurrentAiRestoration(): Promise<{ job: AiRestorationJob | null }> {
+  return getJson<{ job: AiRestorationJob | null }>("/api/restorations/current");
+}
+
+export function startCurrentDvdAiRestoration(
+  title: number,
+  options: {
+    localMediaId?: string;
+    previewSeconds?: number;
+    model?: "realesrgan-x4plus" | "realesr-animevideov3";
+    audioTrack?: number;
+    subtitleTrack?: number;
+  } = {}
+): Promise<{ job: AiRestorationJob }> {
+  return postJson<{ job: AiRestorationJob }>("/api/restorations/current", { title, ...options });
+}
+
+export function cancelCurrentAiRestoration(): Promise<{ job: AiRestorationJob | null }> {
+  return deleteJson<{ job: AiRestorationJob | null }>("/api/restorations/current");
+}
+
+export function deleteAiRestoration(jobId: string): Promise<{ ok: boolean }> {
+  return deleteJson<{ ok: boolean }>(`/api/restorations/cache/${encodeURIComponent(jobId)}`);
+}
+
+export function pauseCurrentAiRestoration(): Promise<{ job: AiRestorationJob | null }> {
+  return postJson<{ job: AiRestorationJob | null }>("/api/restorations/current/pause");
+}
+
+export function resumeCurrentAiRestoration(): Promise<{ job: AiRestorationJob | null }> {
+  return postJson<{ job: AiRestorationJob | null }>("/api/restorations/current/resume");
 }
 
 export async function saveCurrentDvdMetadata(titles: DvdMetadataTitleInput[]): Promise<DiscInspection> {

@@ -22,6 +22,17 @@ export const commandCapabilitiesSchema = z.object({
 
 export type CommandCapabilities = z.infer<typeof commandCapabilitiesSchema>;
 
+export const aiUpscalingCapabilitiesSchema = z.object({
+  available: z.boolean(),
+  backend: z.enum(["realesrgan-ncnn-vulkan", "realesrgan-pytorch-cuda"]).optional(),
+  gpuAccelerated: z.boolean(),
+  executable: z.string().optional(),
+  pythonExecutable: z.string().optional(),
+  fallbackExecutable: z.string().optional()
+});
+
+export type AiUpscalingCapabilities = z.infer<typeof aiUpscalingCapabilitiesSchema>;
+
 export const platformCapabilitiesSchema = z.object({
   platform: supportedPlatformSchema,
   platformVersion: z.string().optional(),
@@ -31,13 +42,15 @@ export const platformCapabilitiesSchema = z.object({
   videoEncoders: z.object({
     libx264: z.boolean(),
     h264VideoToolbox: z.boolean(),
-    h264V4l2m2m: z.boolean()
+    h264V4l2m2m: z.boolean(),
+    h264Nvenc: z.boolean().optional()
   }),
   audioEncoders: z.object({
     aac: z.boolean(),
     libmp3lame: z.boolean(),
     flac: z.boolean()
   }),
+  aiUpscaling: aiUpscalingCapabilitiesSchema.optional(),
   opticalDrives: z.number().int().nonnegative(),
   paths: z.object({
     configDir: z.string(),

@@ -13,7 +13,8 @@ export interface RuntimePathEnvironment {
 }
 
 export async function resolveRuntimePaths(cwd = process.cwd(), env: RuntimePathEnvironment = process.env): Promise<RuntimePaths> {
-  const runtimeDir = path.resolve(nonEmpty(env.DISCSTREAM_RUNTIME_DIR) ?? path.join(cwd, "runtime"));
+  const workspaceRoot = await findWorkspaceRoot(cwd);
+  const runtimeDir = path.resolve(nonEmpty(env.DISCSTREAM_RUNTIME_DIR) ?? path.join(workspaceRoot ?? cwd, "runtime"));
   const paths: RuntimePaths = {
     configDir: resolveRuntimePath(runtimeDir, "config", env.DISCSTREAM_CONFIG_DIR),
     dataDir: resolveRuntimePath(runtimeDir, "data", env.DISCSTREAM_DATA_DIR),
@@ -26,6 +27,23 @@ export async function resolveRuntimePaths(cwd = process.cwd(), env: RuntimePathE
   await Promise.all(Object.values(paths).map((directory) => fs.mkdir(directory, { recursive: true })));
 
   return paths;
+}
+
+async function findWorkspaceRoot(startPath: string): Promise<string | null> {
+  let candidate = path.resolve(startPath);
+
+  while (true) {
+    try {
+      await fs.access(path.join(candidate, "pnpm-workspace.yaml"));
+      return candidate;
+    } catch {
+      const parent = path.dirname(candidate);
+      if (parent === candidate) {
+        return null;
+      }
+      candidate = parent;
+    }
+  }
 }
 
 function resolveRuntimePath(runtimeDir: string, child: string, override: string | undefined): string {

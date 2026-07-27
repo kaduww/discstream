@@ -174,6 +174,39 @@ check_command ffmpeg "Install FFmpeg for DVD/video streaming."
 check_command ffprobe "Install FFprobe for media inspection."
 check_optical_tools
 
+section "AI restoration"
+PROJECT_AI_EXECUTABLE="$DATA_DIR/ai/realesrgan/realesrgan-ncnn-vulkan"
+if [[ -x "$PROJECT_AI_EXECUTABLE" ]]; then
+  ok "project-local Real-ESRGAN found at $PROJECT_AI_EXECUTABLE"
+elif command -v realesrgan-ncnn-vulkan >/dev/null 2>&1; then
+  ok "Real-ESRGAN found at $(command -v realesrgan-ncnn-vulkan)"
+else
+  warn "Real-ESRGAN not found. Run pnpm install:ai to enable cached AI restoration."
+fi
+if [[ "$(uname -s)" == "Linux" ]] && command -v nvidia-smi >/dev/null 2>&1; then
+  ok "NVIDIA driver is available."
+  CUDA_PYTHON="$DATA_DIR/ai/cuda/venv/bin/python"
+  if [[ -x "$CUDA_PYTHON" ]] && "$CUDA_PYTHON" -c 'import torch; raise SystemExit(0 if torch.cuda.is_available() else 1)' 2>/dev/null; then
+    ok "Project-local PyTorch CUDA backend is ready."
+  else
+    warn "PyTorch CUDA backend not found. Run pnpm install:ai:cuda to enable it."
+  fi
+  if command -v vulkaninfo >/dev/null 2>&1; then
+    if vulkaninfo --summary 2>/dev/null | grep -qi nvidia; then
+      ok "NVIDIA Vulkan device detected."
+    else
+      warn "vulkaninfo did not report an NVIDIA device."
+    fi
+  else
+    warn "vulkaninfo not found. Install vulkan-tools to validate NVIDIA Vulkan support."
+  fi
+  if ffmpeg -hide_banner -encoders 2>/dev/null | grep -q h264_nvenc; then
+    ok "FFmpeg NVIDIA NVENC encoder detected."
+  else
+    warn "FFmpeg does not expose h264_nvenc; AI will use NVIDIA but final encoding will use another encoder."
+  fi
+fi
+
 section "Local Media"
 check_local_roots
 

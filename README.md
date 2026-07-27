@@ -116,6 +116,34 @@ http://localhost:5173
 
 During development the web app proxies `/api` calls to the server.
 
+## Project-local AI restoration
+
+On macOS or Linux, install the portable Real-ESRGAN backend and its models only inside this DiscStream workspace:
+
+```sh
+pnpm install:ai
+```
+
+The installer verifies the official archive checksum and places the private installation under
+`runtime/data/ai/realesrgan`. This directory is runtime data and is not committed to Git. No global
+Python, PyTorch, CUDA, or Real-ESRGAN installation is required.
+
+Run `pnpm doctor` and open Diagnostics in the web app to confirm that AI restoration is ready. A
+custom portable installation can be selected with `DISCSTREAM_REALESRGAN_PATH`.
+
+On Linux with NVIDIA, install the current proprietary NVIDIA driver and a working Vulkan ICD. DiscStream
+automatically prefers `h264_nvenc` when the installed FFmpeg build exposes it, so both AI inference and
+final H.264 encoding use NVIDIA hardware. CUDA is not required by the portable NCNN/Vulkan backend.
+
+For the optional higher-feature PyTorch/CUDA backend on Linux NVIDIA:
+
+```sh
+pnpm install:ai:cuda
+```
+
+This creates an isolated Python virtual environment under `runtime/data/ai/cuda`. When CUDA passes its
+startup check, DiscStream prefers it automatically and retains NCNN/Vulkan as the fallback backend.
+
 ## Local Media Folders
 
 Local media can be added through the UI with the server-side folder picker.

@@ -119,6 +119,7 @@ describe("SessionManager", () => {
   it("selects the best available H.264 encoder for the host", () => {
     expect(selectH264VideoEncoder(testCapabilities({ platform: "darwin", h264VideoToolbox: true }))).toBe("h264_videotoolbox");
     expect(selectH264VideoEncoder(testCapabilities({ platform: "linux", h264V4l2m2m: true }))).toBe("h264_v4l2m2m");
+    expect(selectH264VideoEncoder(testCapabilities({ platform: "linux", h264Nvenc: true }))).toBe("h264_nvenc");
     expect(selectH264VideoEncoder(testCapabilities({ platform: "linux", libx264: true }))).toBe("libx264");
   });
 
@@ -510,6 +511,7 @@ function testCapabilities(options: {
   libx264?: boolean;
   h264VideoToolbox?: boolean;
   h264V4l2m2m?: boolean;
+  h264Nvenc?: boolean;
 }): PlatformCapabilities {
   return {
     platform: options.platform,
@@ -533,7 +535,8 @@ function testCapabilities(options: {
     videoEncoders: {
       libx264: options.libx264 ?? false,
       h264VideoToolbox: options.h264VideoToolbox ?? false,
-      h264V4l2m2m: options.h264V4l2m2m ?? false
+      h264V4l2m2m: options.h264V4l2m2m ?? false,
+      h264Nvenc: options.h264Nvenc ?? false
     },
     audioEncoders: {
       aac: true,

@@ -16,6 +16,7 @@ import { registerJsonBodyParser } from "./api/json-parser.js";
 import { registerRoutes } from "./api/routes.js";
 import { registerRuntimeStatusWebSocket } from "./api/runtime-websocket.js";
 import { SessionManager } from "./sessions/session-manager.js";
+import { AiRestorationManager } from "./sessions/ai-restoration-manager.js";
 
 export async function buildApp() {
   const config = loadConfig();
@@ -51,6 +52,8 @@ export async function buildApp() {
     getDriveStatus: (driveId) => platform.getDriveStatus(driveId),
     inspectDisc: async (driveId) => audioCdMetadata.applyToDisc(await dvdMetadata.applyToDisc(await platform.inspectInsertedMedia(driveId)))
   });
+  const restorations = new AiRestorationManager(paths.cacheDir);
+  await restorations.initialize();
   const staleStreamsRemoved = await sessions.cleanupStaleStreams();
   if (staleStreamsRemoved > 0) {
     app.log.info({ removed: staleStreamsRemoved }, "removed stale stream cache directories");
@@ -71,6 +74,7 @@ export async function buildApp() {
     localMediaRoots,
     serverFolders,
     sessions,
+    restorations,
     audioCdMetadata,
     dvdMetadata,
     config,
@@ -83,12 +87,19 @@ export async function buildApp() {
   const webDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/dist");
   const webIndexPath = path.join(webDist, "index.html");
   const hasWebBuild = fs.existsSync(webIndexPath);
+  fs.mkdirSync(path.join(paths.cacheDir, "ai-restorations"), { recursive: true });
   await app.register(fastifyStatic, {
     root: paths.streamsDir,
     prefix: "/streams/",
     decorateReply: false,
     cacheControl: false,
     setHeaders: setStreamHeaders
+  });
+  await app.register(fastifyStatic, {
+    root: path.join(paths.cacheDir, "ai-restorations"),
+    prefix: "/restorations/",
+    decorateReply: false,
+    cacheControl: true
   });
 
   if (hasWebBuild) {

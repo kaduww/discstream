@@ -5,3 +5,4 @@ export * from "./drive.js";
 export * from "./errors.js";
 export * from "./local-media.js";
 export * from "./session.js";
+export * from "./restoration.js";

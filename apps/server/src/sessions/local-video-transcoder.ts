@@ -13,7 +13,7 @@ export interface LocalVideoTranscodeRequest {
   videoQuality?: VideoQualityProfile;
 }
 
-export type H264VideoEncoder = "libx264" | "h264_videotoolbox" | "h264_v4l2m2m";
+export type H264VideoEncoder = "libx264" | "h264_videotoolbox" | "h264_v4l2m2m" | "h264_nvenc";
 export type VideoQualityProfile = "fast" | "balanced" | "quality";
 
 export interface RunningTranscode {
@@ -145,6 +145,12 @@ export function h264VideoEncoderArgs(encoder: H264VideoEncoder, quality: VideoQu
   if (encoder === "h264_v4l2m2m") {
     const bitrate = quality === "fast" ? "1400k" : quality === "quality" ? "3500k" : "2200k";
     return ["-c:v", "h264_v4l2m2m", "-b:v", bitrate];
+  }
+
+  if (encoder === "h264_nvenc") {
+    const preset = quality === "fast" ? "p2" : quality === "quality" ? "p6" : "p4";
+    const cq = quality === "fast" ? "28" : quality === "quality" ? "19" : "23";
+    return ["-c:v", "h264_nvenc", "-preset", preset, "-tune", "hq", "-rc", "vbr", "-cq", cq, "-b:v", "0"];
   }
 
   const preset = quality === "fast" ? "ultrafast" : quality === "quality" ? "medium" : "veryfast";

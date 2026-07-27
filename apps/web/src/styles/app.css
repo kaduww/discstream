@@ -372,6 +372,40 @@ p {
   gap: 8px;
 }
 
+.ai-restoration-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(134, 244, 159, 0.25);
+  border-radius: 10px;
+  background: rgba(134, 244, 159, 0.06);
+}
+
+.ai-restoration-panel > div:first-child {
+  display: grid;
+  flex: 1;
+  gap: 5px;
+}
+
+.ai-restoration-panel progress {
+  width: 100%;
+  accent-color: #86f49f;
+}
+
+.ai-restoration-panel small {
+  color: #ffb4a8;
+}
+
+.ai-restoration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .dvd-controls .dvd-option:first-child {
   grid-column: 1 / -1;
 }
