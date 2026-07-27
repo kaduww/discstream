@@ -7,6 +7,7 @@ import {
   buildDvdConcatProtocolInput,
   buildDvdHlsArgs,
   buildDvdSourceList,
+  buildDvdVideoFilter,
   findDvdTitleSets,
   resolveVideoTsPath,
   selectDvdTitleSet
@@ -59,7 +60,7 @@ describe("DVD video transcoder helpers", () => {
     expect(args).toContain("concat");
     expect(args).toContain("/tmp/session/title.ffconcat");
     expect(args).toContain("100M");
-    expect(args).toContain("yadif=0:-1:0,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p");
+    expect(args).toContain("yadif=0:-1:0,scale=trunc(720*dar/2)*2:720:flags=lanczos,setsar=1,format=yuv420p");
     expect(args).toContain("libx264");
     expect(args).toContain("aac");
     expect(args).toContain("independent_segments");
@@ -109,10 +110,20 @@ describe("DVD video transcoder helpers", () => {
 
     expect(args).toContain("concat:/DVD/VIDEO_TS/VTS_01_1.VOB|/DVD/VIDEO_TS/VTS_01_2.VOB");
     expect(args).toContain("-filter_complex");
-    expect(args).toContain("[0:v:0][0:4]overlay,yadif=0:-1:0,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p[v]");
+    expect(args).toContain(
+      "[0:v:0][0:4]overlay,yadif=0:-1:0,scale=trunc(720*dar/2)*2:720:flags=lanczos,setsar=1,format=yuv420p[v]"
+    );
     expect(args).toContain("[v]");
     expect(args).toContain("0:3");
     expect(args).toContain("-sn");
+  });
+
+  it("builds aspect-correct DVD upscale filters", () => {
+    expect(buildDvdVideoFilter("native")).toBe(
+      "yadif=0:-1:0,scale=trunc(iw*sar/2)*2:trunc(ih/2)*2:flags=lanczos,setsar=1,format=yuv420p"
+    );
+    expect(buildDvdVideoFilter("720p")).toContain("scale=trunc(720*dar/2)*2:720:flags=lanczos");
+    expect(buildDvdVideoFilter("1080p")).toContain("scale=trunc(1080*dar/2)*2:1080:flags=lanczos");
   });
 
   it("builds DVD HLS arguments with a hardware H.264 encoder", () => {

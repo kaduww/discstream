@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { makeError } from "@discstream/contracts";
+import { makeError, type DvdUpscaleProfile } from "@discstream/contracts";
 import { findDvdTitleSets, resolveVideoTsPath, selectDvdTitleSet, type DvdTitleSet } from "@discstream/platform";
 import { h264VideoEncoderArgs, type H264VideoEncoder, type RunningTranscode, type VideoQualityProfile } from "./local-video-transcoder.js";
 
@@ -18,6 +18,7 @@ export interface DvdVideoTranscodeRequest {
   startupTimeoutMs?: number;
   videoEncoder?: H264VideoEncoder;
   videoQuality?: VideoQualityProfile;
+  dvdUpscale?: DvdUpscaleProfile;
 }
 
 export type DvdVideoTranscoder = (request: DvdVideoTranscodeRequest) => Promise<RunningTranscode>;
@@ -61,7 +62,8 @@ export const startDvdVideoHlsTranscode: DvdVideoTranscoder = async (request) => 
       audioTrack: request.audioTrack,
       subtitleTrack,
       videoEncoder: request.videoEncoder,
-      videoQuality: request.videoQuality
+      videoQuality: request.videoQuality,
+      dvdUpscale: request.dvdUpscale
     }),
     {
       stdio: ["ignore", "pipe", "pipe"]
@@ -121,8 +123,9 @@ export function buildDvdHlsArgs(request: {
   subtitleTrack?: number;
   videoEncoder?: H264VideoEncoder;
   videoQuality?: VideoQualityProfile;
+  dvdUpscale?: DvdUpscaleProfile;
 }): string[] {
-  const videoFilter = "yadif=0:-1:0,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p";
+  const videoFilter = buildDvdVideoFilter(request.dvdUpscale ?? "720p");
   const selectedAudio = typeof request.audioTrack === "number" ? request.audioTrack : undefined;
   const audioDisabled = request.audioTrack === null;
   const subtitleFilter =
@@ -178,6 +181,15 @@ export function buildDvdHlsArgs(request: {
     request.segmentPattern,
     request.playlistPath
   ];
+}
+
+export function buildDvdVideoFilter(upscale: DvdUpscaleProfile): string {
+  if (upscale === "native") {
+    return "yadif=0:-1:0,scale=trunc(iw*sar/2)*2:trunc(ih/2)*2:flags=lanczos,setsar=1,format=yuv420p";
+  }
+
+  const height = upscale === "1080p" ? 1080 : 720;
+  return `yadif=0:-1:0,scale=trunc(${height}*dar/2)*2:${height}:flags=lanczos,setsar=1,format=yuv420p`;
 }
 
 async function waitForDvdPlaylist(

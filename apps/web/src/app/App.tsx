@@ -29,6 +29,7 @@ import {
 import type {
   DiagnosticsResponse,
   DiscInspection,
+  DvdUpscaleProfile,
   LocalMediaFolderBrowserResponse,
   LocalMediaItem,
   PlaybackSession,
@@ -88,6 +89,7 @@ interface LocalMediaGroup {
 const PLAYBACK_HISTORY_STORAGE_KEY = "discstream.playbackHistory.v1";
 const COLLAPSED_LOCAL_MEDIA_GROUPS_STORAGE_KEY = "discstream.collapsedLocalMediaGroups.v1";
 const VIDEO_QUALITY_STORAGE_KEY = "discstream.videoQuality.v1";
+const DVD_UPSCALE_STORAGE_KEY = "discstream.dvdUpscale.v1";
 const TV_MODE_STORAGE_KEY = "discstream.tvMode.v1";
 const RESUME_MIN_SECONDS = 8;
 const RESUME_END_GUARD_SECONDS = 10;
@@ -149,6 +151,7 @@ export function App() {
   const [selectedDvdSubtitleTrack, setSelectedDvdSubtitleTrack] = useState<number | null>(null);
   const [selectedDvdChapter, setSelectedDvdChapter] = useState<number | null>(null);
   const [selectedDvdVideoQuality, setSelectedDvdVideoQuality] = useState<VideoQualityProfile>(() => loadVideoQualityPreference());
+  const [selectedDvdUpscale, setSelectedDvdUpscale] = useState<DvdUpscaleProfile>(() => loadDvdUpscalePreference());
   const [playbackHistory, setPlaybackHistory] = useState<PlaybackResumeHistory>(() => loadPlaybackHistory());
   const [localMediaQuery, setLocalMediaQuery] = useState("");
   const [localMediaFilter, setLocalMediaFilter] = useState<LocalMediaFilter>("all");
@@ -265,7 +268,8 @@ export function App() {
     startSeconds: selectedDvdChapterDetails?.startSeconds,
     audioTrack: selectedDvdAudioTrack,
     subtitleTrack: selectedDvdSubtitleTrack,
-    videoQuality: selectedDvdVideoQuality
+    videoQuality: selectedDvdVideoQuality,
+    dvdUpscale: selectedDvdUpscale
   };
   const selectedDvdResumeKey =
     snapshot?.disc.type === "dvd-video" && selectedDvdTitleId ? dvdPlaybackKey(snapshot.disc, selectedDvdTitleId) : null;
@@ -676,6 +680,7 @@ export function App() {
                   selectedAudioTrack={selectedDvdAudioTrack}
                   selectedSubtitleTrack={selectedDvdSubtitleTrack}
                   selectedVideoQuality={selectedDvdVideoQuality}
+                  selectedUpscale={selectedDvdUpscale}
                   onSelectTitle={(title) => {
                     setSelectedDvdTitle(title);
                     setSelectedDvdAudioTrack(undefined);
@@ -687,6 +692,10 @@ export function App() {
                   onSelectVideoQuality={(quality) => {
                     setSelectedDvdVideoQuality(quality);
                     saveVideoQualityPreference(quality);
+                  }}
+                  onSelectUpscale={(upscale) => {
+                    setSelectedDvdUpscale(upscale);
+                    saveDvdUpscalePreference(upscale);
                   }}
                   selectedChapter={selectedDvdChapter}
                   onSelectChapter={setSelectedDvdChapter}
@@ -968,11 +977,13 @@ function DvdTitles({
   selectedAudioTrack,
   selectedSubtitleTrack,
   selectedVideoQuality,
+  selectedUpscale,
   selectedChapter,
   onSelectTitle,
   onSelectAudioTrack,
   onSelectSubtitleTrack,
   onSelectVideoQuality,
+  onSelectUpscale,
   onSelectChapter,
   onSaveMetadata,
   onPlay
@@ -983,11 +994,13 @@ function DvdTitles({
   selectedAudioTrack: number | undefined;
   selectedSubtitleTrack: number | null;
   selectedVideoQuality: VideoQualityProfile;
+  selectedUpscale: DvdUpscaleProfile;
   selectedChapter: number | null;
   onSelectTitle: (title: number) => void;
   onSelectAudioTrack: (track: number | undefined) => void;
   onSelectSubtitleTrack: (track: number | null) => void;
   onSelectVideoQuality: (quality: VideoQualityProfile) => void;
+  onSelectUpscale: (upscale: DvdUpscaleProfile) => void;
   onSelectChapter: (chapter: number | null) => void;
   onSaveMetadata: (titles: DvdMetadataTitleInput[]) => Promise<void>;
   onPlay: (options: DvdPlaybackOptions) => void;
@@ -1071,7 +1084,8 @@ function DvdTitles({
               startSeconds: activeChapter?.startSeconds,
               audioTrack: selectedAudioTrack,
               subtitleTrack: selectedSubtitleTrack,
-              videoQuality: selectedVideoQuality
+              videoQuality: selectedVideoQuality,
+              dvdUpscale: selectedUpscale
             });
           }}
           disabled={!activeTitle || pendingTitle !== null}
@@ -1155,6 +1169,21 @@ function DvdTitles({
             <option value="fast">Fast start</option>
             <option value="balanced">Balanced</option>
             <option value="quality">Best image</option>
+          </select>
+        </label>
+
+        <label className="dvd-option">
+          <span>Resolution</span>
+          <select
+            value={selectedUpscale}
+            onChange={(event) => {
+              onSelectUpscale(event.currentTarget.value as DvdUpscaleProfile);
+            }}
+            disabled={pendingTitle !== null}
+          >
+            <option value="native">Original</option>
+            <option value="720p">Upscale 720p</option>
+            <option value="1080p">Upscale 1080p</option>
           </select>
         </label>
       </div>
@@ -2105,8 +2134,12 @@ function PlayerPanel({
       <div className="player-heading">
         <span className="eyebrow">Player</span>
         <h2>{session?.displayName ?? "Ready"}</h2>
-        {session?.videoEncoder || session?.videoQuality ? (
-          <p>{[session.videoEncoder ? videoEncoderLabel(session.videoEncoder) : undefined, session.videoQuality ? videoQualityLabel(session.videoQuality) : undefined].filter(Boolean).join(" - ")}</p>
+        {session?.videoEncoder || session?.videoQuality || session?.dvdUpscale ? (
+          <p>{[
+            session.videoEncoder ? videoEncoderLabel(session.videoEncoder) : undefined,
+            session.videoQuality ? videoQualityLabel(session.videoQuality) : undefined,
+            session.dvdUpscale ? dvdUpscaleLabel(session.dvdUpscale) : undefined
+          ].filter(Boolean).join(" - ")}</p>
         ) : null}
       </div>
 
@@ -2311,6 +2344,10 @@ function videoEncoderLabel(encoder: string): string {
     default:
       return encoder;
   }
+}
+
+function dvdUpscaleLabel(upscale: DvdUpscaleProfile): string {
+  return upscale === "native" ? "Original DVD resolution" : `Upscaled to ${upscale}`;
 }
 
 function videoQualityLabel(quality: VideoQualityProfile): string {
@@ -2888,6 +2925,23 @@ function saveVideoQualityPreference(quality: VideoQualityProfile): void {
     window.localStorage.setItem(VIDEO_QUALITY_STORAGE_KEY, quality);
   } catch {
     // Video quality can safely fall back to the default.
+  }
+}
+
+function loadDvdUpscalePreference(): DvdUpscaleProfile {
+  try {
+    const value = window.localStorage.getItem(DVD_UPSCALE_STORAGE_KEY);
+    return value === "native" || value === "1080p" || value === "720p" ? value : "720p";
+  } catch {
+    return "720p";
+  }
+}
+
+function saveDvdUpscalePreference(upscale: DvdUpscaleProfile): void {
+  try {
+    window.localStorage.setItem(DVD_UPSCALE_STORAGE_KEY, upscale);
+  } catch {
+    // DVD upscale can safely fall back to 720p.
   }
 }
 

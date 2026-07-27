@@ -305,7 +305,8 @@ export class SessionManager {
       audioTrack: request.audioTrack,
       subtitleTrack: request.subtitleTrack,
       videoEncoder,
-      videoQuality: request.videoQuality ?? "balanced"
+      videoQuality: request.videoQuality ?? "balanced",
+      dvdUpscale: request.dvdUpscale ?? "720p"
     });
 
     const session: PlaybackSession = {
@@ -320,6 +321,7 @@ export class SessionManager {
       subtitleTrack: request.subtitleTrack,
       videoEncoder,
       videoQuality: request.videoQuality ?? "balanced",
+      dvdUpscale: request.dvdUpscale ?? "720p",
       displayName: dvdDisplayName(dvdSource.label ?? "DVD-Video", request.title, request.chapter),
       streamUrl: `/streams/${encodeURIComponent(sessionId)}/${encodeURIComponent(path.basename(transcode.playlistPath))}`,
       startedAt: new Date().toISOString()
@@ -444,7 +446,8 @@ export class SessionManager {
       audioTrack: request.audioTrack,
       subtitleTrack: request.subtitleTrack,
       videoEncoder,
-      videoQuality: request.videoQuality ?? "balanced"
+      videoQuality: request.videoQuality ?? "balanced",
+      dvdUpscale: request.dvdUpscale ?? "720p"
     });
 
     const session: PlaybackSession = {
@@ -459,6 +462,7 @@ export class SessionManager {
       subtitleTrack: request.subtitleTrack,
       videoEncoder,
       videoQuality: request.videoQuality ?? "balanced",
+      dvdUpscale: request.dvdUpscale ?? "720p",
       displayName: dvdDisplayName(displayName, request.title, request.chapter),
       streamUrl: `/streams/${encodeURIComponent(sessionId)}/${encodeURIComponent(path.basename(transcode.playlistPath))}`,
       startedAt: new Date().toISOString()

@@ -1,6 +1,7 @@
 import type {
   DiagnosticsResponse,
   DiscInspection,
+  DvdUpscaleProfile,
   DriveStatus,
   DrivesResponse,
   HealthResponse,
@@ -98,6 +99,7 @@ export interface DvdPlaybackOptions {
   audioTrack?: number;
   subtitleTrack?: number | null;
   videoQuality?: VideoQualityProfile;
+  dvdUpscale?: DvdUpscaleProfile;
 }
 
 export interface DvdMetadataChapterInput {
@@ -190,6 +192,7 @@ export function playLocalMedia(item: LocalMediaItem, options: DvdPlaybackOptions
     audioTrack: options.audioTrack,
     subtitleTrack: options.subtitleTrack,
     videoQuality: options.videoQuality,
+    dvdUpscale: options.dvdUpscale,
     replace: true
   });
 }
@@ -214,6 +217,7 @@ export function playDvdVideo(driveId: string | undefined, options: DvdPlaybackOp
     audioTrack: options.audioTrack,
     subtitleTrack: options.subtitleTrack,
     videoQuality: options.videoQuality,
+    dvdUpscale: options.dvdUpscale,
     replace: true
   });
 }

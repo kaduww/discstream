@@ -27,6 +27,9 @@ export type PlaybackSessionStatus = z.infer<typeof playbackSessionStatusSchema>;
 export const videoQualityProfileSchema = z.enum(["fast", "balanced", "quality"]);
 export type VideoQualityProfile = z.infer<typeof videoQualityProfileSchema>;
 
+export const dvdUpscaleProfileSchema = z.enum(["native", "720p", "1080p"]);
+export type DvdUpscaleProfile = z.infer<typeof dvdUpscaleProfileSchema>;
+
 export const createSessionRequestSchema = z.object({
   mediaType: playbackMediaTypeSchema,
   driveId: z.string().optional(),
@@ -38,6 +41,7 @@ export const createSessionRequestSchema = z.object({
   audioTrack: z.number().int().nullable().optional(),
   subtitleTrack: z.number().int().nullable().optional(),
   videoQuality: videoQualityProfileSchema.optional(),
+  dvdUpscale: dvdUpscaleProfileSchema.optional(),
   replace: z.boolean().default(false)
 });
 
@@ -58,6 +62,7 @@ export const playbackSessionSchema = z.object({
   subtitleTrack: z.number().int().nullable().optional(),
   videoEncoder: z.string().optional(),
   videoQuality: videoQualityProfileSchema.optional(),
+  dvdUpscale: dvdUpscaleProfileSchema.optional(),
   displayName: z.string().optional(),
   startedAt: z.string().optional(),
   stoppedAt: z.string().optional(),
