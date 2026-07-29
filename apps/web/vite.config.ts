@@ -7,6 +7,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 700
   },
   server: {
+    host: "0.0.0.0",
     port: 5173,
     proxy: {
       "/streams": {

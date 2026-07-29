@@ -9,6 +9,7 @@
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "doctor": "./scripts/doctor.sh",
+    "install:wsl": "./scripts/install-wsl.sh",
     "install:ai": "./scripts/install-ai.sh",
     "install:ai:cuda": "./scripts/install-ai-cuda.sh",
     "test": "pnpm -r test",

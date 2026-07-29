@@ -23,6 +23,11 @@ PORT="${DISCSTREAM_PORT:-7373}"
 
 WARNINGS=0
 FAILURES=0
+IS_WSL=false
+
+if [[ "$(uname -s)" == "Linux" ]] && grep -qiE "(microsoft|wsl)" /proc/sys/kernel/osrelease /proc/version 2>/dev/null; then
+  IS_WSL=true
+fi
 
 section() {
   printf "\n%s\n" "$1"
@@ -151,6 +156,28 @@ check_optical_tools() {
   esac
 }
 
+check_wsl() {
+  if [[ "$IS_WSL" != true ]]; then
+    return
+  fi
+
+  ok "WSL environment detected."
+
+  local node_path
+  node_path="$(command -v node 2>/dev/null || true)"
+  if [[ "$node_path" == /mnt/* ]]; then
+    fail "Node.js resolves to a Windows executable ($node_path). Install Node.js inside WSL."
+  fi
+
+  if [[ "$ROOT_DIR" == /mnt/* ]]; then
+    warn "workspace is on a Windows-mounted drive. File watching and package installation are faster under the WSL home directory."
+  fi
+
+  if ! compgen -G "/dev/sr*" >/dev/null; then
+    warn "no optical device is attached to WSL. Local media under /mnt is still available; use usbipd-win for a USB drive."
+  fi
+}
+
 printf "DiscStream doctor\n"
 printf "Workspace: %s\n" "$ROOT_DIR"
 if [[ -f "$ENV_FILE" ]]; then
@@ -158,6 +185,9 @@ if [[ -f "$ENV_FILE" ]]; then
 else
   printf "Environment: not found at %s\n" "$ENV_FILE"
 fi
+
+section "Environment"
+check_wsl
 
 section "Runtime"
 check_dir "config directory" "$CONFIG_DIR"

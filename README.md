@@ -116,6 +116,26 @@ http://localhost:5173
 
 During development the web app proxies `/api` calls to the server.
 
+### Windows Subsystem for Linux (WSL)
+
+Use WSL 2 with Ubuntu or Debian and run all Node.js commands inside WSL. The setup helper installs
+FFmpeg and the Linux utilities used by DiscStream, validates that a Linux Node.js installation is in
+use, installs the workspace, and builds the web app:
+
+```sh
+pnpm install:wsl
+pnpm dev
+```
+
+On a fresh machine where pnpm is not installed yet, run `./scripts/install-wsl.sh` directly instead.
+Open `http://localhost:5173` from the Windows browser. Windows media folders are available through
+paths such as `/mnt/c/Users/you/Videos`.
+
+For better install and file-watching performance, clone the project into the WSL filesystem rather
+than under `/mnt/c`. Physical optical drives are not exposed to WSL automatically; USB drives must be
+attached with `usbipd-win` before DiscStream can detect `/dev/sr*`. See [docs/setup.md](./docs/setup.md)
+for the full WSL procedure and limitations.
+
 ## Project-local AI restoration
 
 On macOS or Linux, install the portable Real-ESRGAN backend and its models only inside this DiscStream workspace:

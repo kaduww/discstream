@@ -127,6 +127,51 @@ journalctl -u discstream -f
 tail -f /var/lib/discstream/logs/server.log
 ```
 
+## WSL 2
+
+Use an Ubuntu or Debian WSL 2 distribution. Keep the repository in the Linux filesystem when
+possible, for example `~/DiscStream`; projects under `/mnt/c` work, but dependency installation and
+development file watching are slower.
+
+From inside WSL:
+
+```sh
+cd ~/DiscStream
+./scripts/install-wsl.sh
+pnpm dev
+```
+
+The helper installs FFmpeg, `lsblk`, `eject`, `udev`, `lsof`, `curl`, and `unzip`. It requires Node.js
+20 or newer installed inside WSL and rejects a Windows `node.exe` reached through `/mnt/c`. After it
+starts, open `http://localhost:5173` in a Windows browser.
+
+Windows files use their WSL paths. For example:
+
+```sh
+DISCSTREAM_LOCAL_MEDIA_ROOTS=/mnt/c/Users/you/Music:/mnt/d/Videos pnpm dev
+```
+
+Run `pnpm doctor` to verify the environment.
+
+### Optical drives in WSL
+
+WSL does not expose a Windows optical drive automatically. For a USB CD/DVD drive, install
+`usbipd-win` on Windows, then use an elevated PowerShell window to list and share the device:
+
+```powershell
+usbipd list
+usbipd bind --busid <BUSID>
+usbipd attach --wsl --busid <BUSID>
+```
+
+Back in WSL, confirm that `lsblk` shows a device such as `/dev/sr0`, then run `pnpm doctor`. USB/IP
+support depends on the drive and WSL kernel; if the device does not appear as `/dev/sr*`, local media
+playback still works but physical CD/DVD playback is unavailable in WSL.
+
+For access from another device on the local network, Windows may require a firewall rule and port
+forwarding to the current WSL address. Access from the Windows host itself normally works through
+`localhost`.
+
 ## macOS launchd
 
 1. Choose a project path, for example `~/Applications/DiscStream`.
