@@ -158,6 +158,15 @@ for them.
 
 Run `pnpm doctor` to verify the environment.
 
+The optional CUDA AI installer requires Python 3.9 through 3.12 because its pinned PyTorch release
+does not provide packages for Python 3.13 or newer. On a WSL distribution whose default `python3` is
+newer, install a compatible interpreter and select it explicitly:
+
+```sh
+sudo apt install python3.12 python3.12-venv
+DISCSTREAM_CUDA_PYTHON=python3.12 pnpm install:ai:cuda
+```
+
 ### Optical drives in WSL
 
 WSL does not expose a Windows optical drive automatically. For a USB CD/DVD drive, install
