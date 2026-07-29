@@ -10,6 +10,9 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5173,
     proxy: {
+      "/restorations": {
+        target: "http://localhost:7373"
+      },
       "/streams": {
         target: "http://localhost:7373"
       },
