@@ -158,14 +158,17 @@ for them.
 
 Run `pnpm doctor` to verify the environment.
 
-The optional CUDA AI installer requires Python 3.9 through 3.12 because its pinned PyTorch release
-does not provide packages for Python 3.13 or newer. On a WSL distribution whose default `python3` is
-newer, install a compatible interpreter and select it explicitly:
+The optional CUDA AI installer supports Python 3.10 through 3.14 and installs PyTorch with its
+CUDA runtime. It uses the NVIDIA Windows driver exposed to WSL; do not install a Linux NVIDIA display
+driver inside WSL. To select a particular interpreter explicitly:
 
 ```sh
-sudo apt install python3.12 python3.12-venv
-DISCSTREAM_CUDA_PYTHON=python3.12 pnpm install:ai:cuda
+DISCSTREAM_CUDA_PYTHON=python3.14 pnpm install:ai:cuda
 ```
+
+The installer verifies the official Real-ESRGAN and BasicSR source archive checksums, applies the
+Python 3.14 and current torchvision compatibility fixes, and validates both CUDA visibility and the
+Real-ESRGAN command after installation.
 
 ### Optical drives in WSL
 

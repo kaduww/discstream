@@ -166,8 +166,10 @@ pnpm install:ai:cuda
 
 This creates an isolated Python virtual environment under `runtime/data/ai/cuda`. When CUDA passes its
 startup check, DiscStream prefers it automatically and retains NCNN/Vulkan as the fallback backend.
-The pinned PyTorch backend requires Python 3.9 through 3.12. The installer selects a compatible
-interpreter automatically; override it when needed with `DISCSTREAM_CUDA_PYTHON=python3.12`.
+The pinned PyTorch backend supports Python 3.10 through 3.14. The installer selects a compatible
+interpreter automatically; override it when needed with `DISCSTREAM_CUDA_PYTHON=python3.14`.
+DiscStream applies small compatibility patches to the verified Real-ESRGAN 0.3.0 and BasicSR 1.4.2
+sources during installation.
 
 ## Local Media Folders
 

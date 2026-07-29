@@ -5,11 +5,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_DIR="${DISCSTREAM_RUNTIME_DIR:-$ROOT_DIR/runtime}"
 CUDA_ROOT="$RUNTIME_DIR/data/ai/cuda"
 SOURCE_DIR="$CUDA_ROOT/Real-ESRGAN"
+BASICSR_SOURCE_DIR="$CUDA_ROOT/BasicSR-1.4.2"
 VENV_DIR="$CUDA_ROOT/venv"
 ARCHIVE_URL="https://github.com/xinntao/Real-ESRGAN/archive/refs/tags/v0.3.0.tar.gz"
 ARCHIVE_SHA256="4fbaa9470fc2e2bffa2f6b0e9b7304b3102d7b4d0c4b9dc3a7ff3d237499fed1"
-PYTHON_MIN_MINOR=9
-PYTHON_MAX_MINOR=12
+BASICSR_ARCHIVE_URL="https://github.com/XPixelGroup/BasicSR/archive/refs/tags/v1.4.2.tar.gz"
+BASICSR_ARCHIVE_SHA256="39296f695e3d52bf38da3d22e85d1c1d02982ce0a96203da7954f57e41299f5b"
+PYTHON_MIN_MINOR=10
+PYTHON_MAX_MINOR=14
+TORCH_VERSION="2.11.0"
+TORCHVISION_VERSION="0.26.0"
+PYTORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "The CUDA backend is supported on Linux with NVIDIA GPUs." >&2
@@ -43,7 +49,7 @@ select_python() {
   fi
 
   local candidate
-  for candidate in python3.12 python3.11 python3.10 python3.9 python3; do
+  for candidate in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
     if command -v "$candidate" >/dev/null 2>&1 && python_is_supported "$candidate"; then
       command -v "$candidate"
       return
@@ -55,10 +61,9 @@ select_python() {
 
 if ! PYTHON_EXECUTABLE="$(select_python)"; then
   detected_version="$(python3 --version 2>/dev/null || echo "not installed")"
-  echo "PyTorch 2.5.1 requires Python 3.$PYTHON_MIN_MINOR through 3.$PYTHON_MAX_MINOR; found $detected_version." >&2
+  echo "PyTorch $TORCH_VERSION requires Python 3.$PYTHON_MIN_MINOR through 3.$PYTHON_MAX_MINOR; found $detected_version." >&2
   echo "Install a compatible Python and its venv package, then retry." >&2
-  echo "Example: sudo apt install python3.12 python3.12-venv" >&2
-  echo "You can select it with DISCSTREAM_CUDA_PYTHON=python3.12 pnpm install:ai:cuda" >&2
+  echo "You can select an interpreter with DISCSTREAM_CUDA_PYTHON=python3.14 pnpm install:ai:cuda" >&2
   exit 1
 fi
 
@@ -82,16 +87,56 @@ fi
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/discstream-cuda.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 curl -fL --retry 2 -o "$TEMP_DIR/realesrgan.tar.gz" "$ARCHIVE_URL"
+curl -fL --retry 2 -o "$TEMP_DIR/basicsr.tar.gz" "$BASICSR_ARCHIVE_URL"
 ACTUAL_SHA256="$(hash_file "$TEMP_DIR/realesrgan.tar.gz")"
 if [[ "$ACTUAL_SHA256" != "$ARCHIVE_SHA256" ]]; then
   echo "Real-ESRGAN source checksum did not match." >&2
   exit 1
 fi
+BASICSR_ACTUAL_SHA256="$(hash_file "$TEMP_DIR/basicsr.tar.gz")"
+if [[ "$BASICSR_ACTUAL_SHA256" != "$BASICSR_ARCHIVE_SHA256" ]]; then
+  echo "BasicSR source checksum did not match." >&2
+  exit 1
+fi
 
 mkdir -p "$CUDA_ROOT"
-rm -rf "$SOURCE_DIR"
+rm -rf "$SOURCE_DIR" "$BASICSR_SOURCE_DIR"
 tar -xzf "$TEMP_DIR/realesrgan.tar.gz" -C "$TEMP_DIR"
+tar -xzf "$TEMP_DIR/basicsr.tar.gz" -C "$TEMP_DIR"
 mv "$TEMP_DIR/Real-ESRGAN-0.3.0" "$SOURCE_DIR"
+mv "$TEMP_DIR/BasicSR-1.4.2" "$BASICSR_SOURCE_DIR"
+
+"$PYTHON_EXECUTABLE" - "$SOURCE_DIR" "$BASICSR_SOURCE_DIR" <<'PY'
+from pathlib import Path
+import sys
+
+for root_text in sys.argv[1:]:
+    setup_path = Path(root_text) / "setup.py"
+    content = setup_path.read_text()
+    old = """def get_version():
+    with open(version_file, 'r') as f:
+        exec(compile(f.read(), version_file, 'exec'))
+    return locals()['__version__']
+"""
+    new = """def get_version():
+    namespace = {}
+    with open(version_file, 'r') as f:
+        exec(compile(f.read(), version_file, 'exec'), namespace)
+    return namespace['__version__']
+"""
+    if old not in content:
+        raise SystemExit(f"Unsupported version loader in {setup_path}")
+    setup_path.write_text(content.replace(old, new))
+
+degradations_path = Path(sys.argv[2]) / "basicsr/data/degradations.py"
+content = degradations_path.read_text()
+old_import = "from torchvision.transforms.functional_tensor import rgb_to_grayscale"
+new_import = "from torchvision.transforms.functional import rgb_to_grayscale"
+if old_import not in content:
+    raise SystemExit(f"Unsupported torchvision import in {degradations_path}")
+degradations_path.write_text(content.replace(old_import, new_import))
+PY
+
 if [[ -x "$VENV_DIR/bin/python" ]]; then
   VENV_PYTHON_VERSION="$("$VENV_DIR/bin/python" -c 'import sys; print(".".join(map(str, sys.version_info[:2])))' 2>/dev/null || true)"
   SELECTED_PYTHON_VERSION="$("$PYTHON_EXECUTABLE" -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')"
@@ -101,10 +146,15 @@ if [[ -x "$VENV_DIR/bin/python" ]]; then
   fi
 fi
 "$PYTHON_EXECUTABLE" -m venv "$VENV_DIR"
-"$VENV_DIR/bin/python" -m pip install --upgrade pip wheel setuptools
-"$VENV_DIR/bin/python" -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
-"$VENV_DIR/bin/python" -m pip install basicsr facexlib gfpgan -r "$SOURCE_DIR/requirements.txt"
-"$VENV_DIR/bin/python" -m pip install --no-deps -e "$SOURCE_DIR"
+"$VENV_DIR/bin/python" -m pip install --upgrade pip wheel "setuptools<82"
+"$VENV_DIR/bin/python" -m pip install \
+  "torch==$TORCH_VERSION" \
+  "torchvision==$TORCHVISION_VERSION" \
+  --index-url "$PYTORCH_INDEX_URL"
+"$VENV_DIR/bin/python" -m pip install --no-build-isolation -e "$BASICSR_SOURCE_DIR"
+"$VENV_DIR/bin/python" -m pip install facexlib gfpgan -r "$SOURCE_DIR/requirements.txt"
+"$VENV_DIR/bin/python" -m pip install --no-build-isolation --no-deps -e "$SOURCE_DIR"
 
 "$VENV_DIR/bin/python" -c 'import torch; assert torch.cuda.is_available(); print("CUDA ready:", torch.cuda.get_device_name(0))'
+"$VENV_DIR/bin/python" "$SOURCE_DIR/inference_realesrgan.py" --help >/dev/null
 echo "DiscStream CUDA backend installed at $CUDA_ROOT"
