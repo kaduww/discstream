@@ -151,6 +151,11 @@ Windows files use their WSL paths. For example:
 DISCSTREAM_LOCAL_MEDIA_ROOTS=/mnt/c/Users/you/Music:/mnt/d/Videos pnpm dev
 ```
 
+Drive-letter mounts are inspected automatically. A Windows `D:` or `E:` volume mounted by WSL as
+`/mnt/d` or `/mnt/e` is recognized as a DVD when its root contains `VIDEO_TS`. Ejecting these
+drive-letter volumes from the web app is disabled because WSL does not expose a safe eject operation
+for them.
+
 Run `pnpm doctor` to verify the environment.
 
 ### Optical drives in WSL

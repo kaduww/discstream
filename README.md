@@ -131,6 +131,9 @@ On a fresh machine where pnpm is not installed yet, run `./scripts/install-wsl.s
 Open `http://localhost:5173` from the Windows browser. Windows media folders are available through
 paths such as `/mnt/c/Users/you/Videos`.
 
+DiscStream also checks WSL drive-letter mounts such as `/mnt/d` and `/mnt/e`. When one contains a
+`VIDEO_TS` folder, it appears in the app as `Windows DVD Drive D:`, `Windows DVD Drive E:`, and so on.
+
 For better install and file-watching performance, clone the project into the WSL filesystem rather
 than under `/mnt/c`. Physical optical drives are not exposed to WSL automatically; USB drives must be
 attached with `usbipd-win` before DiscStream can detect `/dev/sr*`. See [docs/setup.md](./docs/setup.md)

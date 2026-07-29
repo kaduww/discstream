@@ -7,6 +7,7 @@ import { runCommand } from "../common/process.js";
 import type { RuntimePaths } from "../platform-adapter.js";
 import { BasePlatformAdapter } from "../common/base-adapter.js";
 import { parseLsblkDiscInfo } from "./lsblk-disc.js";
+import { detectWslDvdDrives } from "./wsl-drive-letter.js";
 
 export class LinuxPlatformAdapter extends BasePlatformAdapter {
   readonly platform = "linux" as const;
@@ -18,14 +19,15 @@ export class LinuxPlatformAdapter extends BasePlatformAdapter {
   }
 
   async detectOpticalDrives(): Promise<OpticalDrive[]> {
+    const wslDrives = await detectWslDvdDrives();
     let entries: string[];
     try {
       entries = await fs.readdir("/dev");
     } catch {
-      return [];
+      return wslDrives.map(({ drive }) => drive);
     }
 
-    return entries
+    const linuxDrives: OpticalDrive[] = entries
       .filter((entry) => /^sr\d+$/.test(entry))
       .sort()
       .map((entry, index) => ({
@@ -40,6 +42,10 @@ export class LinuxPlatformAdapter extends BasePlatformAdapter {
           closeTray: false
         }
       }));
+
+    // WSL drive-letter DVDs are already known to contain VIDEO_TS, so keep them
+    // ahead of an attached but empty /dev/sr* device selected by the current API.
+    return [...wslDrives.map(({ drive }) => drive), ...linuxDrives];
   }
 
   override async getDriveStatus(driveId: string): Promise<DriveStatus> {
@@ -55,7 +61,7 @@ export class LinuxPlatformAdapter extends BasePlatformAdapter {
       };
     }
 
-    const info = await this.readLsblkInfo(drive.systemDevice);
+    const info = await this.readDriveInfo(drive);
     return {
       driveId: drive.id,
       status: info.mediaPresent ? "media-present" : "empty",
@@ -82,7 +88,7 @@ export class LinuxPlatformAdapter extends BasePlatformAdapter {
       };
     }
 
-    const info = await this.readLsblkInfo(drive.systemDevice);
+    const info = await this.readDriveInfo(drive);
     if (!info.mediaPresent) {
       return {
         driveId,
@@ -128,6 +134,9 @@ export class LinuxPlatformAdapter extends BasePlatformAdapter {
     const drive = (await this.detectOpticalDrives()).find((item) => item.id === driveId);
     if (!drive) {
       throw makeError("NO_OPTICAL_DRIVE", "No optical drive was found for eject.");
+    }
+    if (!drive.capabilities.eject) {
+      throw makeError("UNSUPPORTED_OPERATION", `${drive.displayName} cannot be ejected from WSL.`);
     }
 
     const result = await runCommand("eject", [drive.systemDevice], { timeoutMs: 4000 });
@@ -175,5 +184,21 @@ export class LinuxPlatformAdapter extends BasePlatformAdapter {
         inferredDiscType: "none" as const
       };
     }
+  }
+
+  private async readDriveInfo(drive: OpticalDrive) {
+    if (drive.id.startsWith("wsl-drive-")) {
+      const mountedDrive = (await detectWslDvdDrives()).find(({ drive: item }) => item.id === drive.id);
+      if (mountedDrive) {
+        return {
+          devicePath: drive.systemDevice,
+          mediaPresent: true,
+          mountedVolume: mountedDrive.mountedVolume,
+          inferredDiscType: "data-disc" as const
+        };
+      }
+    }
+
+    return this.readLsblkInfo(drive.systemDevice);
   }
 }
